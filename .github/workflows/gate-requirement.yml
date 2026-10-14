@@ -39,7 +39,7 @@ jobs:
         run: if [ "$(id -u)" = "0" ] || sudo -n true 2>/dev/null; then npx playwright install --with-deps chromium; else npx playwright install chromium; fi && npx playwright test --pass-with-no-tests
       - name: Upload Playwright artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-artifacts
           path: |-
