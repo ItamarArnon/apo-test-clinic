@@ -1,0 +1,72 @@
+name: gate-requirement
+on:
+  pull_request:
+    branches:
+      - dev
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  gate-requirement:
+    name: gate-requirement
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install
+        run: npm ci
+      - name: Lint
+        run: npx eslint . --max-warnings=0
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Unit tests
+        run: npx vitest run tests/unit --passWithNoTests
+      - name: Integration tests
+        run: npx vitest run tests/integration --passWithNoTests
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: End-to-end tests
+        run: if [ "$(id -u)" = "0" ] || sudo -n true 2>/dev/null; then npx playwright install --with-deps chromium; else npx playwright install chromium; fi && npx playwright test --pass-with-no-tests
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |-
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+  security:
+    name: security
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+      - name: Semgrep
+        run: docker run --rm -v "$GITHUB_WORKSPACE:/src" -w /src semgrep/semgrep:1.179.0 semgrep scan --config p/default --error --metrics=off
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
